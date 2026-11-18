@@ -40,14 +40,17 @@ body {
 
 /* Top Navigation Bar */
 .topbar {
-  height: 62px;
+  min-height: 62px;
+  height: auto;
+  width: 100%;
   background: linear-gradient(135deg, #5c0d0d 0%, #831818 55%, #681212 100%);
   color: #ffffff;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  gap: 16px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  gap: 8px 14px;
   border-bottom: 2px solid #d97706;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
   z-index: 40;
@@ -57,10 +60,12 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   cursor: pointer;
   user-select: none;
   flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .brand-emblem {
@@ -77,6 +82,11 @@ body {
   justify-content: center;
   border: 2px solid #fef3c7;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.brand-text {
+  min-width: 0;
 }
 
 .brand-text h1 {
@@ -97,7 +107,8 @@ body {
 /* Search Bar */
 .search-bar-wrap {
   position: relative;
-  flex: 1;
+  flex: 1 1 170px;
+  min-width: 165px;
   max-width: 460px;
 }
 
@@ -215,8 +226,12 @@ body {
 .toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 0 1 auto;
+  max-width: 100%;
+  margin-left: auto;
 }
 
 .view-mode-switch {
@@ -430,6 +445,7 @@ body {
 /* Workspace & Interactive Canvas */
 .workspace {
   flex: 1;
+  min-height: 0;
   position: relative;
   display: flex;
   overflow: hidden;
@@ -1520,4 +1536,89 @@ body.app-locked .workspace {
   justify-content: flex-end;
   gap: 8px;
   padding-top: 4px;
+}
+
+/* ================= RESPONSIVE TOPBAR ================= */
+@media (max-width: 1580px) {
+  .topbar {
+    padding: 7px 14px;
+    gap: 8px 10px;
+  }
+
+  .brand-emblem {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+  }
+
+  .brand-text h1 {
+    font-size: 13.5px;
+  }
+
+  .brand-text p {
+    font-size: 11px;
+  }
+
+  .toolbar-actions {
+    gap: 5px;
+  }
+
+  .topbar .btn {
+    height: 34px;
+    padding: 0 8px;
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .topbar .mode-btn {
+    height: 30px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .topbar .toolbar-select {
+    height: 34px;
+    max-width: 142px;
+    padding: 0 6px;
+    font-size: 12px;
+  }
+
+  #searchInput {
+    height: 34px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 1320px) {
+  .search-bar-wrap {
+    max-width: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .brand-text h1 {
+    font-size: 13px;
+  }
+
+  .search-bar-wrap {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .toolbar-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .topbar .menu-dropdown {
+    left: 0;
+    right: auto;
+    max-width: calc(100vw - 20px);
+  }
 }
