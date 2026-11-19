@@ -838,6 +838,17 @@ body {
   cursor: default;
 }
 
+.spouse-fullname-line {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.spouse-fullname-line span {
+  color: #334155;
+  font-weight: 500;
+}
+
 .note-box {
   background: #f8fafc;
   border: 1px dashed #cbd5e1;
@@ -1086,17 +1097,54 @@ body {
 }
 
 .spouse-edit-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  padding: 10px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: center;
+}
+
+.spouse-edit-top {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.spouse-edit-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.sp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sp-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
 }
 
 .spouse-edit-row input {
+  width: 100%;
   padding: 7px 9px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   font-size: 13px;
+  font-family: inherit;
+}
+
+.spouse-edit-row input:focus {
+  outline: none;
+  border-color: #d97706;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.15);
 }
 
 .modal-footer {
