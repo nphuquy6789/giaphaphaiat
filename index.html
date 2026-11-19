@@ -2,7 +2,9 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#6b1111" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="robots" content="noindex, nofollow" />
   <title>Kế Phả Đồ Phái Ất Chi Ất Họ Nguyễn Phúc - Thôn Bình An</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -191,7 +193,7 @@
       </svg>
 
       <!-- Floating Legend & Stats Bar (Bottom Left) -->
-      <div class="floating-legend">
+      <div id="floatingLegend" class="floating-legend">
         <div class="legend-items">
           <span class="legend-item">
             <span class="legend-box male-sample"></span>
@@ -212,6 +214,9 @@
 
       <!-- Floating Zoom & Navigation Controls (Bottom Right) -->
       <div class="floating-controls">
+        <button id="btnToggleLegend" class="ctrl-btn mobile-only-btn" title="Hiện/Ẩn chú thích màu và thống kê">
+          ℹ️ Chú thích
+        </button>
         <button id="btnFocusRoot" class="ctrl-btn" title="Về Thủy Tổ Đời 1 (Nguyễn Phúc Lộc)">
           Thủy Tổ Đời 1
         </button>
@@ -226,14 +231,18 @@
       </div>
     </div>
 
-    <!-- Right Slide-over Member Detail Panel -->
+    <!-- Right Slide-over Member Detail Panel (Bottom Sheet on Mobile) -->
     <aside id="memberDetailDrawer" class="detail-drawer hidden">
+      <div class="drawer-drag-handle" id="drawerDragHandle" aria-hidden="true"><span></span></div>
       <div class="drawer-header">
         <div>
           <span id="detailBadgeRole" class="role-badge">NAM ĐINH</span>
           <span id="detailBadgeGen" class="gen-badge">ĐỜI 1</span>
         </div>
-        <button id="btnCloseDrawer" class="icon-close-btn" title="Đóng">✕</button>
+        <div class="drawer-header-actions">
+          <button id="btnToggleDrawerSize" class="ctrl-btn btn-sm mobile-only-btn" title="Mở rộng / Thu gọn bảng chi tiết">⤢ Mở rộng</button>
+          <button id="btnCloseDrawer" class="icon-close-btn" title="Đóng">✕</button>
+        </div>
       </div>
 
       <div class="drawer-body">
@@ -439,16 +448,18 @@
           </div>
         </div>
 
-        <div class="form-row two-cols">
-          <div class="form-group">
-            <label>Năm sinh / Thông tin sinh (S:)</label>
-            <input type="text" id="formSinh" placeholder="VD: S: 1985 hoặc S:" />
-          </div>
-          <div class="form-group">
+        <div class="form-group">
+          <label>Năm sinh / Thông tin sinh (S:)</label>
+          <input type="text" id="formSinh" placeholder="VD: S: 1985 hoặc S:" />
+        </div>
+
+        <details class="form-advanced-box">
+          <summary>⚙️ Tùy chọn nâng cao (Vị trí trên bản vẽ)</summary>
+          <div class="form-group" style="margin-top: 8px;">
             <label>Tọa độ ngang X trên bản vẽ (Tùy chọn)</label>
             <input type="number" id="formTopX" placeholder="Để trống sẽ tự động căn vị trí" />
           </div>
-        </div>
+        </details>
 
         <!-- Spouses Editor Section -->
         <div class="form-section">

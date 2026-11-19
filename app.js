@@ -57,8 +57,15 @@
   const BANYAN_CY = 13250;
   let viewBox = { x: 0, y: 400, w: 38200, h: 21500 };
   let isDragging = false;
+  let dragMoved = false;
+  let suppressCanvasClickUntil = 0;
   let dragStart = { x: 0, y: 0, vx: 0, vy: 0 };
+  let pinchState = null;
   let animFrameId = null;
+
+  function isMobileViewport() {
+    return window.innerWidth <= 768;
+  }
 
   // DOM Elements
   const svgEl = document.getElementById('phaDoSvg');
@@ -3563,7 +3570,7 @@
         return;
       }
     }
-    fitFullScreen(true);
+    fitInitialView(true);
     showToast(
       mode === 'cay-dai-thu'
         ? '🌳 Đã chuyển sang Mẫu 2: Gia Phả Cây Đại Thụ!'
@@ -3623,14 +3630,37 @@
     }
   }
 
-  function focusOnPoint(worldX, worldY, targetZoomW = 8200) {
+  function fitInitialView(animate = true) {
+    if (!isMobileViewport()) {
+      fitFullScreen(animate);
+      return;
+    }
+    if (currentViewMode === 'cay-dai-thu') {
+      focusOnPoint(BANYAN_CX, BANYAN_CY + 1400, 14500, animate);
+    } else {
+      const root = familyData.nodes.find(n => Number(n.generation) === 1);
+      const rx = root && root.topX ? root.topX : 19242;
+      const ry = root && root.y ? root.y + 1100 : 3200;
+      focusOnPoint(rx, ry, 7600, animate);
+    }
+  }
+
+  function focusOnPoint(worldX, worldY, targetZoomW = 8200, animate = true) {
     const rect = canvasContainer.getBoundingClientRect();
     const aspect = rect.width / Math.max(1, rect.height);
     const w = targetZoomW;
     const h = w / aspect;
+    const isBottomSheetOpen =
+      isMobileViewport() && !memberDetailDrawer.classList.contains('hidden');
+    const yBias = isBottomSheetOpen ? 0.24 : 0.5;
     const x = worldX - w / 2;
-    const y = worldY - h / 2;
-    animateViewBoxTo(x, y, w, h);
+    const y = worldY - h * yBias;
+    if (animate) {
+      animateViewBoxTo(x, y, w, h);
+    } else {
+      viewBox = { x, y, w, h };
+      applyViewBox();
+    }
   }
 
   function focusGeneration(gen) {
@@ -3665,11 +3695,17 @@
     const node = familyData.nodes.find(n => n.id === nodeId);
     if (!node) return;
 
+    const wasClosed = memberDetailDrawer.classList.contains('hidden');
     selectedNodeId = nodeId;
     highlightedIds = computeLineageSet(nodeId);
     renderPhaDo();
     populateDetailDrawer(node);
     memberDetailDrawer.classList.remove('hidden');
+    if (wasClosed) {
+      memberDetailDrawer.classList.remove('expanded');
+      const btnExpand = document.getElementById('btnToggleDrawerSize');
+      if (btnExpand) btnExpand.textContent = '⤢ Mở rộng';
+    }
 
     if (panToNode) {
       if (currentViewMode === 'cay-dai-thu') {
@@ -3684,6 +3720,9 @@
     selectedNodeId = null;
     highlightedIds.clear();
     memberDetailDrawer.classList.add('hidden');
+    memberDetailDrawer.classList.remove('expanded');
+    const btnExpand = document.getElementById('btnToggleDrawerSize');
+    if (btnExpand) btnExpand.textContent = '⤢ Mở rộng';
     renderPhaDo();
   }
 
@@ -3953,13 +3992,13 @@
     filtered.forEach((rec, i) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${i + 1}</td>
-        <td><span class="gio-date-pill">Ngày ${rec.day}/${rec.month} ÂL</span></td>
-        <td>${monthNames[rec.month] || '—'}</td>
-        <td><strong>${rec.name}</strong></td>
-        <td>${rec.role} — <span style="color:#64748b;">${rec.relation}</span></td>
-        <td><span class="gen-badge">Đời ${rec.generation}</span></td>
-        <td>
+        <td data-label="STT">${i + 1}</td>
+        <td data-label="Ngày Giỗ (ÂL)"><span class="gio-date-pill">Ngày ${rec.day}/${rec.month} ÂL</span></td>
+        <td data-label="Tháng">${monthNames[rec.month] || '—'}</td>
+        <td data-label="Họ và Tên"><strong>${rec.name}</strong></td>
+        <td data-label="Vai trò">${rec.role} — <span style="color:#64748b;">${rec.relation}</span></td>
+        <td data-label="Đời thứ"><span class="gen-badge">Đời ${rec.generation}</span></td>
+        <td data-label="Thao tác">
           <button class="btn btn-sm btn-outline jump-gio-btn" data-id="${rec.nodeId}">
             Xem trên Phả đồ ➔
           </button>
@@ -4025,6 +4064,7 @@
         `;
         div.addEventListener('click', () => {
           searchResultsDropdown.classList.add('hidden');
+          searchInput.blur();
           selectMember(node.id, true);
         });
         searchResultsDropdown.appendChild(div);
@@ -4385,16 +4425,34 @@
 
   // Set up Event Listeners (Pan, Zoom, Modals, Buttons)
   function setupInteractions() {
+    // Prevent accidental node selection click immediately after panning/pinching
+    canvasContainer.addEventListener(
+      'click',
+      e => {
+        if (e.target.closest('.floating-controls, .floating-legend')) return;
+        if (performance.now() < suppressCanvasClickUntil) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      },
+      true
+    );
+
     // Mouse Pan
     canvasContainer.addEventListener('mousedown', e => {
       if (e.button !== 0) return;
+      if (e.target.closest('.floating-controls, .floating-legend')) return;
       isDragging = true;
+      dragMoved = false;
       canvasContainer.classList.add('dragging');
       dragStart = { x: e.clientX, y: e.clientY, vx: viewBox.x, vy: viewBox.y };
     });
 
     window.addEventListener('mousemove', e => {
       if (!isDragging) return;
+      if (Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y) > 6) {
+        dragMoved = true;
+      }
       const rect = canvasContainer.getBoundingClientRect();
       const dx = (e.clientX - dragStart.x) * (viewBox.w / rect.width);
       const dy = (e.clientY - dragStart.y) * (viewBox.h / rect.height);
@@ -4404,36 +4462,163 @@
     });
 
     window.addEventListener('mouseup', () => {
+      if (isDragging && dragMoved) {
+        suppressCanvasClickUntil = performance.now() + 140;
+      }
       isDragging = false;
+      dragMoved = false;
       canvasContainer.classList.remove('dragging');
     });
 
-    // Touch Pan
-    canvasContainer.addEventListener('touchstart', e => {
-      if (e.touches.length === 1) {
+    function startPinch(t1, t2) {
+      const rect = canvasContainer.getBoundingClientRect();
+      const dist0 = Math.max(10, Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY));
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      const mx = (midX - rect.left) / Math.max(1, rect.width);
+      const my = (midY - rect.top) / Math.max(1, rect.height);
+      pinchState = {
+        dist0,
+        startW: viewBox.w,
+        startH: viewBox.h,
+        worldMidX: viewBox.x + viewBox.w * mx,
+        worldMidY: viewBox.y + viewBox.h * my
+      };
+      isDragging = false;
+      dragMoved = true;
+    }
+
+    // Touch Pan + 2-Finger Pinch-to-Zoom
+    canvasContainer.addEventListener(
+      'touchstart',
+      e => {
+        if (e.target.closest('.floating-controls, .floating-legend')) return;
+        if (animFrameId) {
+          cancelAnimationFrame(animFrameId);
+          animFrameId = null;
+        }
+        if (e.touches.length === 2) {
+          startPinch(e.touches[0], e.touches[1]);
+        } else if (e.touches.length === 1) {
+          pinchState = null;
+          isDragging = true;
+          dragMoved = false;
+          dragStart = {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY,
+            vx: viewBox.x,
+            vy: viewBox.y
+          };
+        }
+      },
+      { passive: true }
+    );
+
+    canvasContainer.addEventListener(
+      'touchmove',
+      e => {
+        if (e.target.closest('.floating-controls, .floating-legend')) return;
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          if (!pinchState) {
+            startPinch(e.touches[0], e.touches[1]);
+            return;
+          }
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          const rect = canvasContainer.getBoundingClientRect();
+          const dist = Math.max(10, Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY));
+          const scale = pinchState.dist0 / dist;
+          const aspectRatio = pinchState.startH / Math.max(1, pinchState.startW);
+
+          let newW = Math.max(2200, Math.min(65000, pinchState.startW * scale));
+          let newH = newW * aspectRatio;
+          if (newH < 1200) {
+            newH = 1200;
+            newW = newH / aspectRatio;
+          } else if (newH > 45000) {
+            newH = 45000;
+            newW = newH / aspectRatio;
+          }
+
+          const midX = (t1.clientX + t2.clientX) / 2;
+          const midY = (t1.clientY + t2.clientY) / 2;
+          const currMx = (midX - rect.left) / Math.max(1, rect.width);
+          const currMy = (midY - rect.top) / Math.max(1, rect.height);
+
+          viewBox.w = newW;
+          viewBox.h = newH;
+          viewBox.x = pinchState.worldMidX - newW * currMx;
+          viewBox.y = pinchState.worldMidY - newH * currMy;
+          applyViewBox();
+          return;
+        }
+
+        if (!isDragging || e.touches.length !== 1) return;
+        e.preventDefault();
+        if (Math.hypot(e.touches[0].clientX - dragStart.x, e.touches[0].clientY - dragStart.y) > 6) {
+          dragMoved = true;
+        }
+        const rect = canvasContainer.getBoundingClientRect();
+        const dx = (e.touches[0].clientX - dragStart.x) * (viewBox.w / rect.width);
+        const dy = (e.touches[0].clientY - dragStart.y) * (viewBox.h / rect.height);
+        viewBox.x = dragStart.vx - dx;
+        viewBox.y = dragStart.vy - dy;
+        applyViewBox();
+      },
+      { passive: false }
+    );
+
+    const endTouch = e => {
+      if (e.touches && e.touches.length === 1) {
+        // Transition smoothly from 2-finger pinch to 1-finger pan
+        pinchState = null;
         isDragging = true;
+        dragMoved = true;
         dragStart = {
           x: e.touches[0].clientX,
           y: e.touches[0].clientY,
           vx: viewBox.x,
           vy: viewBox.y
         };
+        return;
       }
-    });
-
-    canvasContainer.addEventListener('touchmove', e => {
-      if (!isDragging || e.touches.length !== 1) return;
-      const rect = canvasContainer.getBoundingClientRect();
-      const dx = (e.touches[0].clientX - dragStart.x) * (viewBox.w / rect.width);
-      const dy = (e.touches[0].clientY - dragStart.y) * (viewBox.h / rect.height);
-      viewBox.x = dragStart.vx - dx;
-      viewBox.y = dragStart.vy - dy;
-      applyViewBox();
-    });
-
-    canvasContainer.addEventListener('touchend', () => {
+      if (dragMoved || pinchState) {
+        suppressCanvasClickUntil = performance.now() + 180;
+      }
+      pinchState = null;
       isDragging = false;
-    });
+      dragMoved = false;
+    };
+
+    canvasContainer.addEventListener('touchend', endTouch);
+    canvasContainer.addEventListener('touchcancel', endTouch);
+
+    // Mobile Legend Toggle
+    const btnToggleLegend = document.getElementById('btnToggleLegend');
+    const floatingLegendEl = document.getElementById('floatingLegend');
+    if (btnToggleLegend && floatingLegendEl) {
+      btnToggleLegend.addEventListener('click', e => {
+        e.stopPropagation();
+        floatingLegendEl.classList.toggle('mobile-open');
+      });
+    }
+
+    // Mobile Bottom Sheet Expand/Collapse
+    const btnToggleDrawerSize = document.getElementById('btnToggleDrawerSize');
+    const drawerDragHandle = document.getElementById('drawerDragHandle');
+    const toggleDrawerExpanded = () => {
+      const isExpanded = memberDetailDrawer.classList.toggle('expanded');
+      if (btnToggleDrawerSize) {
+        btnToggleDrawerSize.textContent = isExpanded ? '⤡ Thu gọn' : '⤢ Mở rộng';
+      }
+    };
+    if (btnToggleDrawerSize) {
+      btnToggleDrawerSize.addEventListener('click', toggleDrawerExpanded);
+    }
+    if (drawerDragHandle) {
+      drawerDragHandle.addEventListener('click', toggleDrawerExpanded);
+    }
 
     // Wheel Zoom centered at cursor
     canvasContainer.addEventListener(
@@ -4519,6 +4704,10 @@
       }
       if (!e.target.closest('.dropdown-wrap')) {
         document.getElementById('exportMenuDropdown').classList.add('hidden');
+      }
+      if (!e.target.closest('#floatingLegend') && !e.target.closest('#btnToggleLegend')) {
+        const legend = document.getElementById('floatingLegend');
+        if (legend) legend.classList.remove('mobile-open');
       }
     });
 
@@ -4707,7 +4896,22 @@
     // Export & Data Dropdown Menu
     document.getElementById('btnExportMenu').addEventListener('click', e => {
       e.stopPropagation();
-      document.getElementById('exportMenuDropdown').classList.toggle('hidden');
+      const btn = e.currentTarget;
+      const menu = document.getElementById('exportMenuDropdown');
+      const willOpen = menu.classList.contains('hidden');
+      menu.classList.toggle('hidden');
+      if (willOpen && isMobileViewport()) {
+        const rect = btn.getBoundingClientRect();
+        const menuW = Math.min(290, window.innerWidth - 20);
+        const clampedLeft = Math.max(10, Math.min(rect.left, window.innerWidth - menuW - 10));
+        menu.style.top = `${Math.round(rect.bottom + 6)}px`;
+        menu.style.left = `${Math.round(clampedLeft)}px`;
+        menu.style.right = 'auto';
+      } else if (!isMobileViewport()) {
+        menu.style.top = '';
+        menu.style.left = '';
+        menu.style.right = '';
+      }
     });
 
     document.getElementById('btnExportPNG').addEventListener('click', () => {
@@ -4863,7 +5067,7 @@
     highlightedIds.clear();
     memberDetailDrawer.classList.add('hidden');
     renderPhaDo();
-    fitFullScreen(false);
+    fitInitialView(false);
   }
 
   function updateRoleUI(pendingCount = 0) {
@@ -5051,7 +5255,7 @@
         if (res.needsSeed && window.INITIAL_FAMILY_DATA) {
           familyData = JSON.parse(JSON.stringify(window.INITIAL_FAMILY_DATA));
           renderPhaDo();
-          fitFullScreen(false);
+          fitInitialView(false);
         } else {
           applyServerNodes(res.nodes || []);
         }
@@ -5087,7 +5291,7 @@
       unlockScreen();
       updateRoleUI(0);
       renderPhaDo();
-      fitFullScreen(false);
+      fitInitialView(false);
       showToast('👁️ Đang ở chế độ xem thử nội bộ (chưa kết nối Google Sheets).');
     });
 
