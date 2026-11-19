@@ -515,7 +515,8 @@
 
       if (actualLen > maxSpan) {
         const currentSize = parseFloat(el.getAttribute('font-size')) || 100;
-        const newSize = Math.max(66, Math.floor(currentSize * (maxSpan / actualLen) * 0.96));
+        const minSize = parseFloat(el.getAttribute('data-min-size')) || 66;
+        const newSize = Math.max(minSize, Math.floor(currentSize * (maxSpan / actualLen) * 0.96));
         el.setAttribute('font-size', String(newSize));
 
         // Keep text dead-center vertically/horizontally inside its compartment after font-size adjustment
@@ -1985,14 +1986,17 @@
     );
 
     const codePrefix = node.code ? `(${node.code}) ` : '';
+    const nodeSinh = node.sinh && node.sinh.trim() !== 'S:' ? node.sinh.trim() : '';
     const dateSuffix = node.gio
       ? ` (${node.gio})`
-      : node.sinh
-      ? ` (${node.sinh})`
+      : nodeSinh
+      ? ` (${nodeSinh})`
       : '';
     const mainLine = `${codePrefix}${node.name}${dateSuffix}`;
     const maxSpan = boxW - 96;
-    const spouses = (node.spouses || []).filter(s => s.name || s.gio || s.sinh);
+    const spouses = (node.spouses || []).filter(
+      s => s.name || s.gio || (s.sinh && s.sinh.trim() !== 'S:')
+    );
     const mainCy = spouses.length >= 2 ? boxY + 240 : spouses.length === 1 ? boxY + 275 : boxY + 320;
     const baseMainSize = Number(node.generation) === 1 ? 124 : 110;
     const mainFontSize = computeInitialFontSize(mainLine, maxSpan, baseMainSize, 68);
@@ -2017,7 +2021,8 @@
     );
 
     spouses.forEach((sp, sIdx) => {
-      const spDate = sp.gio ? ` (${sp.gio})` : sp.sinh ? ` (${sp.sinh})` : '';
+      const spSinh = sp.sinh && sp.sinh.trim() !== 'S:' ? sp.sinh.trim() : '';
+      const spDate = sp.gio ? ` (${sp.gio})` : spSinh ? ` (${spSinh})` : '';
       const spLine = `${sp.name || ''}${spDate}`.trim();
       if (!spLine) return;
       const spCy =
@@ -3088,6 +3093,121 @@
     }
   }
 
+  // Shared typography helper for Banyan Branch (Đời 7..11) and Leaf (Đời 12+) nodes:
+  // keeps member's birth/death date grouped right below their own name (never after spouse's name).
+  function appendBanyanNodeTextLines(textGroup, node, cfg) {
+    const isMale = node.type === 'male';
+    const memberGio = (node.gio || '').trim();
+    const memberSinh = node.sinh && node.sinh.trim() !== 'S:' ? node.sinh.trim() : '';
+    const memberDateStr = memberGio || memberSinh;
+
+    const spouses = (node.spouses || []).filter(s => s.name);
+    const spouseStr = spouses
+      .map(s => {
+        const spGio = (s.gio || '').trim();
+        const spSinh = s.sinh && s.sinh.trim() !== 'S:' ? s.sinh.trim() : '';
+        const spDate = spGio || spSinh;
+        return spDate ? `${s.name} (${spDate})` : s.name;
+      })
+      .join(' • ');
+
+    const displayMainName = node.name || '';
+    const hasMemberDate = Boolean(memberDateStr);
+    const hasSpouse = Boolean(spouseStr);
+
+    let mainCy = 0;
+    let mainBase = cfg.mainBase;
+    let mainMin = cfg.mainMin;
+    let dateCy = 44;
+    let dateBase = cfg.dateBaseTwoLine;
+    let dateMin = cfg.dateMinTwoLine;
+    let spouseCy = cfg.spouseCyTwoLine;
+    let spouseBase = cfg.spouseBaseTwoLine;
+    let spouseMin = cfg.spouseMinTwoLine;
+
+    if (hasMemberDate && hasSpouse) {
+      mainCy = cfg.threeLineMainCy;
+      mainBase = cfg.threeLineMainBase;
+      mainMin = cfg.threeLineMainMin;
+      dateCy = cfg.threeLineDateCy;
+      dateBase = cfg.threeLineDateBase;
+      dateMin = cfg.threeLineDateMin;
+      spouseCy = cfg.threeLineSpouseCy;
+      spouseBase = cfg.threeLineSpouseBase;
+      spouseMin = cfg.threeLineSpouseMin;
+    } else if (hasMemberDate || hasSpouse) {
+      mainCy = hasMemberDate ? -44 : -46;
+    }
+
+    const mainFontSize = computeInitialFontSize(displayMainName, cfg.maxSpan, mainBase, mainMin);
+    textGroup.appendChild(
+      createSvgEl(
+        'text',
+        {
+          x: cfg.textCenterX,
+          y: Math.round(mainCy + mainFontSize * 0.35),
+          'text-anchor': 'middle',
+          fill: isMale ? '#dc2626' : '#1d4ed8',
+          'font-family': "'Be Vietnam Pro', Arial, sans-serif",
+          'font-size': mainFontSize,
+          'font-weight': isMale ? '800' : cfg.femaleMainWeight,
+          'data-max-span': cfg.maxSpan,
+          'data-min-size': mainMin,
+          'data-orient': 'h',
+          'data-cy': mainCy
+        },
+        displayMainName
+      )
+    );
+
+    if (hasMemberDate) {
+      const isSinh = memberDateStr.startsWith('S:');
+      const dateFontSize = computeInitialFontSize(memberDateStr, cfg.maxSpan, dateBase, dateMin);
+      textGroup.appendChild(
+        createSvgEl(
+          'text',
+          {
+            x: cfg.textCenterX,
+            y: Math.round(dateCy + dateFontSize * 0.35),
+            'text-anchor': 'middle',
+            fill: isSinh ? '#1d4ed8' : '#0f172a',
+            'font-family': "'Be Vietnam Pro', Arial, sans-serif",
+            'font-size': dateFontSize,
+            'font-weight': '700',
+            'data-max-span': cfg.maxSpan,
+            'data-min-size': dateMin,
+            'data-orient': 'h',
+            'data-cy': dateCy
+          },
+          memberDateStr
+        )
+      );
+    }
+
+    if (hasSpouse) {
+      const secFontSize = computeInitialFontSize(spouseStr, cfg.maxSpan, spouseBase, spouseMin);
+      textGroup.appendChild(
+        createSvgEl(
+          'text',
+          {
+            x: cfg.textCenterX,
+            y: Math.round(spouseCy + secFontSize * 0.35),
+            'text-anchor': 'middle',
+            fill: cfg.spouseColor,
+            'font-family': "'Be Vietnam Pro', Arial, sans-serif",
+            'font-size': secFontSize,
+            'font-weight': '600',
+            'data-max-span': cfg.maxSpan,
+            'data-min-size': spouseMin,
+            'data-orient': 'h',
+            'data-cy': spouseCy
+          },
+          spouseStr
+        )
+      );
+    }
+  }
+
   // Draw a Wooden Branch Segment Node for Nhánh lớn (Đời 7), Nhánh vừa (Đời 8, 9), Nhánh nhỏ (Đời 10, 11)
   // Unscaled exact radial half-length (halfL = 350) guarantees 0.00px alignment with incoming & outgoing branches!
   function drawBanyanBranchNode(node) {
@@ -3223,66 +3343,31 @@
       );
     }
 
-    const spouses = (node.spouses || []).filter(s => s.name);
-    const spouseStr = spouses.map(s => s.name).join(' • ');
-    const dateStr =
-      node.gio ||
-      (spouses[0] && spouses[0].gio) ||
-      (node.sinh && node.sinh.trim() !== 'S:' ? node.sinh : '');
     const maxBranchTextSpan = orderLabel ? 520 : 610;
     const textCenterX = orderLabel ? (flipText ? 46 : -46) : 0;
 
-    const displayMainName = node.name || '';
-    const hasSecondLine = Boolean(spouseStr || dateStr);
-    const mainCy = hasSecondLine ? -46 : 0;
-    const mainFontSize = computeInitialFontSize(displayMainName, maxBranchTextSpan, 94, 62);
-
-    textGroup.appendChild(
-      createSvgEl(
-        'text',
-        {
-          x: textCenterX,
-          y: Math.round(mainCy + mainFontSize * 0.35),
-          'text-anchor': 'middle',
-          fill: isMale ? '#dc2626' : '#1d4ed8',
-          'font-family': "'Be Vietnam Pro', Arial, sans-serif",
-          'font-size': mainFontSize,
-          'font-weight': '800',
-          'data-max-span': maxBranchTextSpan,
-          'data-orient': 'h',
-          'data-cy': mainCy
-        },
-        displayMainName
-      )
-    );
-
-    if (hasSecondLine) {
-      const secondParts = [];
-      if (spouseStr) secondParts.push(spouseStr);
-      if (dateStr) secondParts.push(dateStr);
-      const secondLine = secondParts.join(' • ');
-      const secCy = 48;
-      const secFontSize = computeInitialFontSize(secondLine, maxBranchTextSpan, 78, 56);
-
-      textGroup.appendChild(
-        createSvgEl(
-          'text',
-          {
-            x: textCenterX,
-            y: Math.round(secCy + secFontSize * 0.35),
-            'text-anchor': 'middle',
-            fill: isMale ? '#7f1d1d' : '#1e3a8a',
-            'font-family': "'Be Vietnam Pro', Arial, sans-serif",
-            'font-size': secFontSize,
-            'font-weight': '600',
-            'data-max-span': maxBranchTextSpan,
-            'data-orient': 'h',
-            'data-cy': secCy
-          },
-          secondLine
-        )
-      );
-    }
+    appendBanyanNodeTextLines(textGroup, node, {
+      maxSpan: maxBranchTextSpan,
+      textCenterX,
+      femaleMainWeight: '800',
+      mainBase: 94,
+      mainMin: 62,
+      dateBaseTwoLine: 72,
+      dateMinTwoLine: 52,
+      spouseCyTwoLine: 48,
+      spouseBaseTwoLine: 78,
+      spouseMinTwoLine: 56,
+      threeLineMainCy: -68,
+      threeLineMainBase: 82,
+      threeLineMainMin: 56,
+      threeLineDateCy: -8,
+      threeLineDateBase: 52,
+      threeLineDateMin: 42,
+      threeLineSpouseCy: 66,
+      threeLineSpouseBase: 70,
+      threeLineSpouseMin: 50,
+      spouseColor: isMale ? '#7f1d1d' : '#1e3a8a'
+    });
 
     g.appendChild(textGroup);
     return g;
@@ -3424,66 +3509,31 @@
       );
     }
 
-    const spouses = (node.spouses || []).filter(s => s.name);
-    const spouseStr = spouses.map(s => s.name).join(' • ');
-    const dateStr =
-      node.gio ||
-      (spouses[0] && spouses[0].gio) ||
-      (node.sinh && node.sinh.trim() !== 'S:' ? node.sinh : '');
     const maxLeafTextSpan = 445;
     const textCenterX = flipText ? 42 : -42;
 
-    const displayMainName = node.name || '';
-    const hasSecondLine = Boolean(spouseStr || dateStr);
-    const mainCy = hasSecondLine ? -46 : 0;
-    const mainFontSize = computeInitialFontSize(displayMainName, maxLeafTextSpan, 90, 58);
-
-    textGroup.appendChild(
-      createSvgEl(
-        'text',
-        {
-          x: textCenterX,
-          y: Math.round(mainCy + mainFontSize * 0.35),
-          'text-anchor': 'middle',
-          fill: isMale ? '#dc2626' : '#1d4ed8',
-          'font-family': "'Be Vietnam Pro', Arial, sans-serif",
-          'font-size': mainFontSize,
-          'font-weight': isMale ? '800' : '700',
-          'data-max-span': maxLeafTextSpan,
-          'data-orient': 'h',
-          'data-cy': mainCy
-        },
-        displayMainName
-      )
-    );
-
-    if (hasSecondLine) {
-      const secondParts = [];
-      if (spouseStr) secondParts.push(spouseStr);
-      if (dateStr) secondParts.push(dateStr);
-      const secondLine = secondParts.join(' • ');
-      const secCy = 46;
-      const secFontSize = computeInitialFontSize(secondLine, maxLeafTextSpan, 74, 52);
-
-      textGroup.appendChild(
-        createSvgEl(
-          'text',
-          {
-            x: textCenterX,
-            y: Math.round(secCy + secFontSize * 0.35),
-            'text-anchor': 'middle',
-            fill: isMale ? '#991b1b' : '#1e3a8a',
-            'font-family': "'Be Vietnam Pro', Arial, sans-serif",
-            'font-size': secFontSize,
-            'font-weight': '600',
-            'data-max-span': maxLeafTextSpan,
-            'data-orient': 'h',
-            'data-cy': secCy
-          },
-          secondLine
-        )
-      );
-    }
+    appendBanyanNodeTextLines(textGroup, node, {
+      maxSpan: maxLeafTextSpan,
+      textCenterX,
+      femaleMainWeight: '700',
+      mainBase: 90,
+      mainMin: 58,
+      dateBaseTwoLine: 68,
+      dateMinTwoLine: 50,
+      spouseCyTwoLine: 46,
+      spouseBaseTwoLine: 74,
+      spouseMinTwoLine: 52,
+      threeLineMainCy: -62,
+      threeLineMainBase: 76,
+      threeLineMainMin: 52,
+      threeLineDateCy: -6,
+      threeLineDateBase: 50,
+      threeLineDateMin: 40,
+      threeLineSpouseCy: 60,
+      threeLineSpouseBase: 64,
+      threeLineSpouseMin: 46,
+      spouseColor: isMale ? '#991b1b' : '#1e3a8a'
+    });
 
     g.appendChild(textGroup);
     return g;
@@ -3705,18 +3755,23 @@
     // 3. Spouses
     detailSpousesTitle.textContent = isMale ? 'PHU NHÂN (VỢ)' : 'PHU QUÂN (CHỒNG / CON RỂ)';
     detailSpousesList.innerHTML = '';
-    const validSpouses = (node.spouses || []).filter(s => s.name || s.gio || (s.sinh && s.sinh !== 'S:'));
+    const validSpouses = (node.spouses || []).filter(
+      s => s.name || s.fullName || s.gio || (s.sinh && s.sinh.trim() !== 'S:')
+    );
     if (validSpouses.length > 0) {
       validSpouses.forEach((sp, i) => {
         const sChip = document.createElement('div');
         sChip.className = 'relative-chip static-chip';
         const orderLabel = isMale && validSpouses.length > 1 ? `Bà ${i + 1}: ` : '';
-        const dateBadge = sp.gio || (sp.sinh && sp.sinh !== 'S:' ? sp.sinh : '');
+        const dateBadge = sp.gio || (sp.sinh && sp.sinh.trim() !== 'S:' ? sp.sinh : '');
+        const displayName = sp.name || sp.fullName || '(Chưa ghi tên)';
+        const fullNameText = sp.fullName && sp.fullName.trim() ? sp.fullName.trim() : 'Chưa cập nhật';
         sChip.innerHTML = `
           <div>
-            <strong>${orderLabel}${sp.name || '(Chưa ghi tên)'}</strong>
+            <strong>${escapeHtml(orderLabel + displayName)}</strong>
+            <div class="spouse-fullname-line">Họ tên đầy đủ: <span>${escapeHtml(fullNameText)}</span></div>
           </div>
-          <span style="font-size:12px;color:#b91c1c;font-weight:600;">${dateBadge}</span>
+          <span style="font-size:12px;color:#b91c1c;font-weight:600;">${escapeHtml(dateBadge)}</span>
         `;
         detailSpousesList.appendChild(sChip);
       });
@@ -3946,12 +4001,21 @@
       matches.slice(0, 25).forEach(node => {
         const div = document.createElement('div');
         div.className = 'search-result-item';
-        const spText = (node.spouses || []).map(s => s.name).filter(Boolean).join(', ');
+        const spText = (node.spouses || [])
+          .map(s => {
+            if (!s.name && !s.fullName) return '';
+            if (s.name && s.fullName && s.fullName !== s.name) {
+              return `${s.name} (${s.fullName})`;
+            }
+            return s.name || s.fullName;
+          })
+          .filter(Boolean)
+          .join(', ');
         div.innerHTML = `
           <div class="sr-main">
-            <span class="sr-name">${node.code ? '(' + node.code + ') ' : ''}${node.name}</span>
+            <span class="sr-name">${escapeHtml((node.code ? '(' + node.code + ') ' : '') + node.name)}</span>
             <span class="sr-sub">
-              ${spText ? 'Vợ/Chồng: ' + spText + ' • ' : ''}${node.gio || node.sinh || ''}
+              ${escapeHtml((spText ? 'Vợ/Chồng: ' + spText + ' • ' : '') + (node.gio || node.sinh || ''))}
             </span>
           </div>
           <div class="sr-badges">
@@ -4066,16 +4130,37 @@
     motherSelect.value = String(selectedMotherIdx || 0);
   }
 
-  function addSpouseRowToForm(sp = { name: '', gio: '', sinh: '' }) {
+  function addSpouseRowToForm(sp = { name: '', fullName: '', gio: '', sinh: '' }) {
     const container = document.getElementById('formSpousesContainer');
     const row = document.createElement('div');
     row.className = 'spouse-edit-row';
     row.innerHTML = `
-      <input type="text" class="sp-name-in" placeholder="Họ tên Vợ / Chồng" value="${sp.name || ''}" />
-      <input type="text" class="sp-gio-in" placeholder="Ngày giỗ (G. 10/2)" value="${sp.gio || ''}" />
-      <input type="text" class="sp-sinh-in" placeholder="Năm sinh (S:)" value="${sp.sinh || ''}" />
-      <button type="button" class="btn btn-sm btn-danger-outline sp-remove-btn" title="Xóa dòng">✕</button>
+      <div class="spouse-edit-top">
+        <div class="sp-field">
+          <label>Tên hiển thị (trên Phả đồ)</label>
+          <input type="text" class="sp-name-in" placeholder="VD: P. Thúy Vân" />
+        </div>
+        <div class="sp-field">
+          <label>Họ tên đầy đủ</label>
+          <input type="text" class="sp-fullname-in" placeholder="VD: Phạm Thị Thúy Vân" />
+        </div>
+        <button type="button" class="btn btn-sm btn-danger-outline sp-remove-btn" title="Xóa dòng">✕</button>
+      </div>
+      <div class="spouse-edit-bottom">
+        <div class="sp-field">
+          <label>Ngày giỗ (G.)</label>
+          <input type="text" class="sp-gio-in" placeholder="Ngày giỗ (G. 10/2)" />
+        </div>
+        <div class="sp-field">
+          <label>Năm sinh (S:)</label>
+          <input type="text" class="sp-sinh-in" placeholder="Năm sinh (S: 1980)" />
+        </div>
+      </div>
     `;
+    row.querySelector('.sp-name-in').value = sp.name || '';
+    row.querySelector('.sp-fullname-in').value = sp.fullName || '';
+    row.querySelector('.sp-gio-in').value = sp.gio || '';
+    row.querySelector('.sp-sinh-in').value = sp.sinh || '';
     row.querySelector('.sp-remove-btn').addEventListener('click', () => row.remove());
     container.appendChild(row);
   }
@@ -4537,10 +4622,16 @@
       const spouses = [];
       spouseRows.forEach(r => {
         const sName = r.querySelector('.sp-name-in').value.trim();
+        const sFullName = r.querySelector('.sp-fullname-in').value.trim();
         const sGio = r.querySelector('.sp-gio-in').value.trim();
         const sSinh = r.querySelector('.sp-sinh-in').value.trim();
-        if (sName || sGio || sSinh) {
-          spouses.push({ name: sName, fullName: sName, gio: sGio, sinh: sSinh });
+        if (sName || sFullName || sGio || sSinh) {
+          spouses.push({
+            name: sName || sFullName,
+            fullName: sFullName,
+            gio: sGio,
+            sinh: sSinh
+          });
         }
       });
 
@@ -4786,9 +4877,17 @@
     if (badge) badge.textContent = String(pendingCount || 0);
   }
 
+  function formatSpouseSummary(s) {
+    const parts = [s.name || ''];
+    if (s.fullName && s.fullName !== s.name) parts.push(`Họ tên đầy đủ: ${s.fullName}`);
+    if (s.gio) parts.push(s.gio);
+    if (s.sinh && s.sinh.trim() !== 'S:') parts.push(s.sinh);
+    return parts.filter(Boolean).join(' - ');
+  }
+
   function buildNodeDiffSummary(changeType, beforeNode, afterNode) {
     if (changeType === 'THEM' && afterNode) {
-      const spText = (afterNode.spouses || []).map(s => `${s.name}${s.gio ? ' (' + s.gio + ')' : ''}`).join(', ');
+      const spText = (afterNode.spouses || []).map(formatSpouseSummary).filter(Boolean).join(', ');
       return [
         `[THÊM MỚI] Đời ${afterNode.generation} — ${afterNode.name}`,
         `- Vai trò: ${afterNode.type === 'female' ? 'Con gái' : 'Nam đinh'}`,
@@ -4823,8 +4922,8 @@
           diffs.push(`- ${label}: "${oldV || '(trống)'}" → "${newV || '(trống)'}"`);
         }
       });
-      const oldSp = (beforeNode.spouses || []).map(s => `${s.name || ''}${s.gio ? ' [' + s.gio + ']' : ''}`).join(' | ');
-      const newSp = (afterNode.spouses || []).map(s => `${s.name || ''}${s.gio ? ' [' + s.gio + ']' : ''}`).join(' | ');
+      const oldSp = (beforeNode.spouses || []).map(formatSpouseSummary).join(' | ');
+      const newSp = (afterNode.spouses || []).map(formatSpouseSummary).join(' | ');
       if (oldSp !== newSp) {
         diffs.push(`- Vợ/Chồng: "${oldSp || '(chưa có)'}" → "${newSp || '(trống)'}"`);
       }
